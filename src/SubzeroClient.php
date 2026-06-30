@@ -7,9 +7,12 @@ namespace Iceberg\Subzero;
 use GuzzleHttp\Client;
 use Iceberg\Subzero\Exceptions\SubzeroApiException;
 use Iceberg\Subzero\Internal\AuthMode;
+use Iceberg\Subzero\Internal\CallerContextCapture;
 use Iceberg\Subzero\Internal\HttpClient;
 use Iceberg\Subzero\Models\ResolveResult;
 use Iceberg\Subzero\Models\ResolveSource;
+use Iceberg\Subzero\Models\RevealCallerContext;
+use Iceberg\Subzero\Models\RevealGrantResult;
 use Iceberg\Subzero\Models\SubzeroConstants;
 use Iceberg\Subzero\Models\TokenizeBatchContext;
 use Iceberg\Subzero\Models\TokenizeBatchItem;
@@ -18,30 +21,47 @@ use Iceberg\Subzero\Models\TokenizeBatchResultItem;
 final class SubzeroClient
 {
     private readonly HttpClient $http;
+    private readonly bool $captureCallerContext;
+    private readonly ?RevealCallerContext $deploymentContext;
+    private readonly bool $captureDeploymentContext;
     public readonly ProxyResource $proxy;
 
     public function __construct(
         ?string $apiKey = null,
         ?string $tokenizeKey = null,
         ?string $revealKey = null,
+        ?string $revealGrantKey = null,
         ?string $proxyKey = null,
         string $baseUrl = 'https://api.subzero-data.com',
         float $timeout = 60.0,
+        bool $captureCallerContext = true,
+        ?RevealCallerContext $deploymentContext = null,
+        bool $captureDeploymentContext = true,
         ?Client $httpClient = null,
     ) {
         $resolvedTokenize = $tokenizeKey ?? $apiKey;
         $resolvedReveal = $revealKey ?? $apiKey;
+        $resolvedRevealGrant = $revealGrantKey ?? $apiKey;
         $resolvedProxy = $proxyKey ?? $apiKey ?? $tokenizeKey;
 
-        if ($resolvedTokenize === null && $resolvedReveal === null && $resolvedProxy === null) {
+        if (
+            $resolvedTokenize === null
+            && $resolvedReveal === null
+            && $resolvedProxy === null
+            && $resolvedRevealGrant === null
+        ) {
             throw new \InvalidArgumentException(
-                'Provide apiKey, or tokenizeKey and/or revealKey and/or proxyKey for scoped credentials.',
+                'Provide apiKey, or tokenizeKey and/or revealKey and/or proxyKey and/or revealGrantKey for scoped credentials.',
             );
         }
 
+        $this->captureCallerContext = $captureCallerContext;
+        $this->deploymentContext = $deploymentContext;
+        $this->captureDeploymentContext = $captureDeploymentContext;
         $this->http = new HttpClient(
             $resolvedTokenize,
             $resolvedReveal,
+            $resolvedRevealGrant,
             $resolvedProxy,
             $baseUrl,
             $timeout,
@@ -60,6 +80,7 @@ final class SubzeroClient
             apiKey: self::envString('SUBZERO_API_KEY'),
             tokenizeKey: self::envString('SUBZERO_TOKENIZE_API_KEY'),
             revealKey: self::envString('SUBZERO_REVEAL_API_KEY'),
+            revealGrantKey: self::envString('SUBZERO_REVEAL_GRANT_API_KEY'),
             proxyKey: self::envString('SUBZERO_PROXY_API_KEY'),
             baseUrl: $resolvedBaseUrl,
             timeout: $timeout,
@@ -100,29 +121,85 @@ final class SubzeroClient
         return (string) $body['token'];
     }
 
-    public function reveal(string $token): string
+    public function reveal(string $token, ?RevealCallerContext $callerContext = null): string
     {
+        $payload = ['token' => $token];
+        $context = CallerContextCapture::resolveRevealCallerContext(
+            $callerContext,
+            $this->captureCallerContext,
+            $this->deploymentContext,
+            $this->captureDeploymentContext,
+        );
+        if ($context !== null) {
+            $payload['caller_context'] = $context;
+        }
+
         /** @var array<string, mixed> $body */
-        $body = $this->http->postJson('/v1/reveal', [
-            'token' => $token,
-        ], AuthMode::RevealKey);
+        $body = $this->http->postJson('/v1/reveal', $payload, AuthMode::RevealKey);
 
         return (string) $body['value'];
     }
 
-    public function resolve(string $value, bool $passthroughOnMiss = false): ResolveResult
-    {
-        /** @var array<string, mixed> $body */
-        $body = $this->http->postJson('/v1/reveal/resolve', [
+    public function resolve(
+        string $value,
+        bool $passthroughOnMiss = false,
+        ?RevealCallerContext $callerContext = null,
+    ): ResolveResult {
+        $payload = [
             'value' => $value,
             'passthrough_on_miss' => $passthroughOnMiss,
-        ], AuthMode::RevealKey);
+        ];
+        $context = CallerContextCapture::resolveRevealCallerContext(
+            $callerContext,
+            $this->captureCallerContext,
+            $this->deploymentContext,
+            $this->captureDeploymentContext,
+        );
+        if ($context !== null) {
+            $payload['caller_context'] = $context;
+        }
+
+        /** @var array<string, mixed> $body */
+        $body = $this->http->postJson('/v1/reveal/resolve', $payload, AuthMode::RevealKey);
 
         return new ResolveResult(
             value: (string) $body['value'],
             source: self::parseResolveSource((string) $body['source']),
             token: self::nullableString($body, 'token'),
             entityType: self::nullableString($body, 'entity_type'),
+        );
+    }
+
+    /** @param array<string, mixed> $clientPublicKeyJwk */
+    public function createRevealGrant(
+        string $token,
+        array $clientPublicKeyJwk,
+        ?string $allowedOrigin = null,
+        ?RevealCallerContext $callerContext = null,
+    ): RevealGrantResult {
+        $payload = [
+            'token' => $token,
+            'client_public_key_jwk' => $clientPublicKeyJwk,
+        ];
+        if ($allowedOrigin !== null) {
+            $payload['allowed_origin'] = $allowedOrigin;
+        }
+        $context = CallerContextCapture::resolveRevealCallerContext(
+            $callerContext,
+            $this->captureCallerContext,
+            $this->deploymentContext,
+            $this->captureDeploymentContext,
+        );
+        if ($context !== null) {
+            $payload['caller_context'] = $context;
+        }
+
+        /** @var array<string, mixed> $body */
+        $body = $this->http->postJson('/v1/reveal/grants', $payload, AuthMode::RevealGrantKey);
+
+        return new RevealGrantResult(
+            grantId: (string) $body['grant_id'],
+            expiresAt: (string) $body['expires_at'],
         );
     }
 

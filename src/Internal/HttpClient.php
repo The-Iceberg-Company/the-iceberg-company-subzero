@@ -32,6 +32,7 @@ final class HttpClient
     public function __construct(
         private readonly ?string $tokenizeKey,
         private readonly ?string $revealKey,
+        private readonly ?string $revealGrantKey,
         private readonly ?string $proxyKey,
         string $baseUrl,
         float $timeout = 60.0,
@@ -125,6 +126,7 @@ final class HttpClient
         $key = match ($auth) {
             AuthMode::TokenizeKey => $this->tokenizeKey,
             AuthMode::RevealKey => $this->revealKey,
+            AuthMode::RevealGrantKey => $this->revealGrantKey,
             AuthMode::ProxyKey => $this->proxyKey,
             AuthMode::None => null,
         };

@@ -59,9 +59,23 @@ $client = new SubzeroClient(apiKey: 'sz_live_...');
 | `tokenize` | `tokenize`, `search`, `tokenizeBatch`, `proxy->scan`, `proxy->discover`, `proxy->restructure` |
 | `proxy` | `proxy->scan`, `proxy->discover`, `proxy->restructure` |
 | `reveal` | `reveal`, `resolve` (requires a matching reveal policy in the dashboard) |
+| `reveal_grant` | `createRevealGrant` (BFF for Elements click-to-reveal) |
 | `admin` | All of the above (bypasses reveal policy) |
 
 Use separate `tokenizeKey`, `revealKey`, and `proxyKey` in production for least privilege.
+
+## Reveal caller context (audit)
+
+By default, `reveal`, `resolve`, and `createRevealGrant` attach optional **`caller_context`** for audit logging. Auto-capture uses the first frame outside `Iceberg\Subzero\` when enabled (default).
+
+```php
+use Iceberg\Subzero\Models\RevealCallerContext;
+
+$client = new SubzeroClient(revealKey: '...', captureCallerContext: false);
+$client->reveal($token, new RevealCallerContext(file: 'Billing.php', line: 42, sdk: 'php'));
+```
+
+**Privacy:** auto-capture may include file paths in audit logs — disable or pass opaque refs if needed.
 
 ## Environment variables
 

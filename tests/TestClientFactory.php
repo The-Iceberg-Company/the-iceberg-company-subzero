@@ -25,6 +25,8 @@ final class TestClientFactory
         ?string $tokenizeKey = self::TOKENIZE_KEY,
         ?string $revealKey = self::REVEAL_KEY,
         ?string $proxyKey = null,
+        ?string $revealGrantKey = null,
+        bool $captureCallerContext = true,
     ): array {
         $log = new TransactionLog();
         $queue = [];
@@ -56,8 +58,10 @@ final class TestClientFactory
         $client = new SubzeroClient(
             tokenizeKey: $tokenizeKey,
             revealKey: $revealKey,
+            revealGrantKey: $revealGrantKey,
             proxyKey: $proxyKey,
             baseUrl: self::BASE,
+            captureCallerContext: $captureCallerContext,
             httpClient: $httpClient,
         );
 
