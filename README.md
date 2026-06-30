@@ -19,7 +19,7 @@ composer install
 In another project:
 
 ```bash
-composer require iceberg/subzero
+composer require the-iceberg-company/subzero
 ```
 
 ## Quick start

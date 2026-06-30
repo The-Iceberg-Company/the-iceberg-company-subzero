@@ -1,5 +1,5 @@
 {
-  "name": "iceberg/subzero",
+  "name": "the-iceberg-company/subzero",
   "description": "PHP client for the Subzero tokenization vault",
   "type": "library",
   "license": "proprietary",
