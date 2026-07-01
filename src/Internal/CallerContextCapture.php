@@ -18,7 +18,7 @@ final class CallerContextCapture
 
 {
 
-    private const SDK_VERSION = '1.0.1';
+    private const SDK_VERSION = '1.0.2';
 
 
 

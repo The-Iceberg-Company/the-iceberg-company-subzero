@@ -2,7 +2,7 @@
   "name": "the-iceberg-company/subzero",
   "description": "PHP client for the Subzero tokenization vault",
   "type": "library",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "license": "proprietary",
   "require": {
     "php": ">=8.1",

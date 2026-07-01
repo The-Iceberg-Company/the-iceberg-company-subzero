@@ -9,6 +9,8 @@ use Iceberg\Subzero\Exceptions\SubzeroApiException;
 use Iceberg\Subzero\Internal\AuthMode;
 use Iceberg\Subzero\Internal\CallerContextCapture;
 use Iceberg\Subzero\Internal\HttpClient;
+use Iceberg\Subzero\Models\ResolveBatchItem;
+use Iceberg\Subzero\Models\ResolveBatchResultItem;
 use Iceberg\Subzero\Models\ResolveResult;
 use Iceberg\Subzero\Models\ResolveSource;
 use Iceberg\Subzero\Models\RevealCallerContext;
@@ -17,6 +19,7 @@ use Iceberg\Subzero\Models\SubzeroConstants;
 use Iceberg\Subzero\Models\TokenizeBatchContext;
 use Iceberg\Subzero\Models\TokenizeBatchItem;
 use Iceberg\Subzero\Models\TokenizeBatchResultItem;
+use Iceberg\Subzero\Models\WarehouseRevealContext;
 
 final class SubzeroClient
 {
@@ -32,6 +35,7 @@ final class SubzeroClient
         ?string $revealKey = null,
         ?string $revealGrantKey = null,
         ?string $proxyKey = null,
+        ?string $warehouseKey = null,
         string $baseUrl = 'https://api.subzero-data.com',
         float $timeout = 60.0,
         bool $captureCallerContext = true,
@@ -43,15 +47,17 @@ final class SubzeroClient
         $resolvedReveal = $revealKey ?? $apiKey;
         $resolvedRevealGrant = $revealGrantKey ?? $apiKey;
         $resolvedProxy = $proxyKey ?? $apiKey ?? $tokenizeKey;
+        $resolvedWarehouse = $warehouseKey ?? $apiKey;
 
         if (
             $resolvedTokenize === null
             && $resolvedReveal === null
             && $resolvedProxy === null
             && $resolvedRevealGrant === null
+            && $resolvedWarehouse === null
         ) {
             throw new \InvalidArgumentException(
-                'Provide apiKey, or tokenizeKey and/or revealKey and/or proxyKey and/or revealGrantKey for scoped credentials.',
+                'Provide apiKey, or tokenizeKey and/or revealKey and/or proxyKey and/or revealGrantKey and/or warehouseKey for scoped credentials.',
             );
         }
 
@@ -63,6 +69,7 @@ final class SubzeroClient
             $resolvedReveal,
             $resolvedRevealGrant,
             $resolvedProxy,
+            $resolvedWarehouse,
             $baseUrl,
             $timeout,
             $httpClient,
@@ -82,6 +89,7 @@ final class SubzeroClient
             revealKey: self::envString('SUBZERO_REVEAL_API_KEY'),
             revealGrantKey: self::envString('SUBZERO_REVEAL_GRANT_API_KEY'),
             proxyKey: self::envString('SUBZERO_PROXY_API_KEY'),
+            warehouseKey: self::envString('SUBZERO_WAREHOUSE_API_KEY'),
             baseUrl: $resolvedBaseUrl,
             timeout: $timeout,
         );
@@ -270,6 +278,161 @@ final class SubzeroClient
 
             $resultItems[] = new TokenizeBatchResultItem(
                 index: (int) $item['index'],
+                token: self::nullableString($item, 'token'),
+                entityType: self::nullableString($item, 'entity_type'),
+                error: self::nullableString($item, 'error'),
+            );
+        }
+
+        return $resultItems;
+    }
+
+    /**
+     * @param list<array{0: int, 1: string}> $data
+     * @return list<array{0: int, 1: string}>
+     */
+    public function revealBatch(
+        array $data,
+        WarehouseRevealContext $context,
+        int $chunkSize = SubzeroConstants::REVEAL_BATCH_MAX_ROWS,
+    ): array {
+        if ($data === []) {
+            throw new \InvalidArgumentException('data must not be empty');
+        }
+
+        if ($chunkSize < 1 || $chunkSize > SubzeroConstants::REVEAL_BATCH_MAX_ROWS) {
+            throw new \InvalidArgumentException(
+                'chunkSize must be between 1 and ' . SubzeroConstants::REVEAL_BATCH_MAX_ROWS,
+            );
+        }
+
+        $results = [];
+        foreach (array_chunk($data, $chunkSize) as $chunk) {
+            array_push($results, ...$this->revealBatchChunk($chunk, $context));
+        }
+
+        return $results;
+    }
+
+    /**
+     * @param list<array{0: int, 1: string}> $data
+     * @return list<array{0: int, 1: string}>
+     */
+    private function revealBatchChunk(array $data, WarehouseRevealContext $context): array
+    {
+        $contextBody = ['principal' => $context->principal];
+        if ($context->source !== null) {
+            $contextBody['source'] = $context->source->value;
+        }
+        if ($context->queryId !== null) {
+            $contextBody['query_id'] = $context->queryId;
+        }
+        if ($context->warehouse !== null) {
+            $contextBody['warehouse'] = $context->warehouse;
+        }
+        if ($context->role !== null) {
+            $contextBody['role'] = $context->role;
+        }
+        if ($context->jobId !== null) {
+            $contextBody['job_id'] = $context->jobId;
+        }
+
+        /** @var array<string, mixed> $body */
+        $body = $this->http->postJson(
+            '/v1/reveal/batch',
+            ['data' => $data, 'context' => $contextBody],
+            AuthMode::WarehouseKey,
+        );
+
+        $rows = [];
+        foreach ($body['data'] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $rows[] = [(int) $row[0], (string) $row[1]];
+        }
+
+        return $rows;
+    }
+
+    /** @param list<ResolveBatchItem> $items */
+    /** @return list<ResolveBatchResultItem> */
+    public function resolveBatch(
+        array $items,
+        bool $passthroughOnMiss = false,
+        ?RevealCallerContext $callerContext = null,
+        int $chunkSize = SubzeroConstants::RESOLVE_BATCH_MAX_ROWS,
+    ): array {
+        if ($items === []) {
+            throw new \InvalidArgumentException('items must not be empty');
+        }
+
+        if ($chunkSize < 1 || $chunkSize > SubzeroConstants::RESOLVE_BATCH_MAX_ROWS) {
+            throw new \InvalidArgumentException(
+                'chunkSize must be between 1 and ' . SubzeroConstants::RESOLVE_BATCH_MAX_ROWS,
+            );
+        }
+
+        $results = [];
+        foreach (array_chunk($items, $chunkSize) as $chunk) {
+            array_push(
+                $results,
+                ...$this->resolveBatchChunk($chunk, $passthroughOnMiss, $callerContext),
+            );
+        }
+
+        return $results;
+    }
+
+    /** @param list<ResolveBatchItem> $items */
+    /** @return list<ResolveBatchResultItem> */
+    private function resolveBatchChunk(
+        array $items,
+        bool $passthroughOnMiss,
+        ?RevealCallerContext $callerContext,
+    ): array {
+        $payload = [
+            'items' => array_map(
+                static function (ResolveBatchItem $item): array {
+                    $row = [
+                        'index' => $item->index,
+                        'value' => $item->value,
+                    ];
+                    if ($item->passthroughOnMiss !== null) {
+                        $row['passthrough_on_miss'] = $item->passthroughOnMiss;
+                    }
+
+                    return $row;
+                },
+                $items,
+            ),
+            'passthrough_on_miss' => $passthroughOnMiss,
+        ];
+
+        $context = CallerContextCapture::resolveRevealCallerContext(
+            $callerContext,
+            $this->captureCallerContext,
+            $this->deploymentContext,
+            $this->captureDeploymentContext,
+        );
+        if ($context !== null) {
+            $payload['caller_context'] = $context;
+        }
+
+        /** @var array<string, mixed> $body */
+        $body = $this->http->postJson('/v1/reveal/resolve/batch', $payload, AuthMode::RevealKey);
+
+        $resultItems = [];
+        foreach ($body['items'] as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $sourceRaw = self::nullableString($item, 'source');
+            $resultItems[] = new ResolveBatchResultItem(
+                index: (int) $item['index'],
+                value: self::nullableString($item, 'value'),
+                source: $sourceRaw === null ? null : self::parseResolveSource($sourceRaw),
                 token: self::nullableString($item, 'token'),
                 entityType: self::nullableString($item, 'entity_type'),
                 error: self::nullableString($item, 'error'),

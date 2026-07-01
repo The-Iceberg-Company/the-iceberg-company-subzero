@@ -34,6 +34,7 @@ final class HttpClient
         private readonly ?string $revealKey,
         private readonly ?string $revealGrantKey,
         private readonly ?string $proxyKey,
+        private readonly ?string $warehouseKey,
         string $baseUrl,
         float $timeout = 60.0,
         ?Client $client = null,
@@ -128,6 +129,7 @@ final class HttpClient
             AuthMode::RevealKey => $this->revealKey,
             AuthMode::RevealGrantKey => $this->revealGrantKey,
             AuthMode::ProxyKey => $this->proxyKey,
+            AuthMode::WarehouseKey => $this->warehouseKey,
             AuthMode::None => null,
         };
 

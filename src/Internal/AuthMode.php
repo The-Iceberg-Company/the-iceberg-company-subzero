@@ -11,4 +11,5 @@ enum AuthMode: string
     case RevealKey = 'reveal_key';
     case RevealGrantKey = 'reveal_grant_key';
     case ProxyKey = 'proxy_key';
+    case WarehouseKey = 'warehouse_key';
 }
