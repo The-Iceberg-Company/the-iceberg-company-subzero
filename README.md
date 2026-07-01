@@ -95,6 +95,7 @@ Dry-run scan, discover, and restructure. No upstream LLM call.
 $scan = $client->proxy->scan(
     messages: [['role' => 'user', 'content' => 'Patient SSN 123-45-6789']],
 );
+// $scan->messages[0]->tokensByEntityType['SSN'] — grouped tokens by entity type
 
 $discover = $client->proxy->discover(
     messages: [['role' => 'user', 'content' => 'Patient SSN 123-45-6789']],

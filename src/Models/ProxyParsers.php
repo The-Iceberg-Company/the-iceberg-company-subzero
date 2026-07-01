@@ -75,6 +75,7 @@ final class ProxyParsers
                 static fn (array $item): SkippedMatchPreview => self::parseSkippedMatchPreview($item),
                 self::list($data, 'skipped_overlaps'),
             ),
+            tokensByEntityType: self::stringListMap($data, 'tokens_by_entity_type'),
         );
     }
 
@@ -93,6 +94,7 @@ final class ProxyParsers
                 static fn (array $item): SkippedMatchPreview => self::parseSkippedMatchPreview($item),
                 self::list($data, 'skipped_overlaps'),
             ),
+            tokensByEntityType: self::stringListMap($data, 'tokens_by_entity_type'),
         );
     }
 
@@ -218,6 +220,25 @@ final class ProxyParsers
             entityType: self::nullableString($data, 'entity_type'),
             value: self::nullableString($data, 'value'),
         );
+    }
+
+    /** @param array<string, mixed> $data */
+    /** @return array<string, list<string>> */
+    private static function stringListMap(array $data, string $key): array
+    {
+        if (!isset($data[$key]) || !is_array($data[$key])) {
+            return [];
+        }
+
+        $result = [];
+        foreach ($data[$key] as $name => $value) {
+            if (!is_array($value)) {
+                continue;
+            }
+            $result[(string) $name] = array_values(array_map(static fn ($item): string => (string) $item, $value));
+        }
+
+        return $result;
     }
 
     /** @param array<string, mixed> $data */

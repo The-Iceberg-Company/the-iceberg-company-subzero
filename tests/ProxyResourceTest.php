@@ -27,6 +27,7 @@ final class ProxyResourceTest extends TestCase
                     'token' => '[SSN_abc12345]',
                 ]],
                 'skipped_overlaps' => [],
+                'tokens_by_entity_type' => ['SSN' => ['[SSN_abc12345]']],
             ]],
             'fields' => [[
                 'path' => 'messages[0].content',
@@ -40,6 +41,7 @@ final class ProxyResourceTest extends TestCase
                     'token' => '[SSN_abc12345]',
                 ]],
                 'skipped_overlaps' => [],
+                'tokens_by_entity_type' => ['SSN' => ['[SSN_abc12345]']],
             ]],
             'body' => null,
         ];
@@ -130,7 +132,9 @@ final class ProxyResourceTest extends TestCase
 
         $this->assertSame(1, $result->matchCounts['SSN']);
         $this->assertSame('Patient SSN [SSN_abc12345]', $result->messages[0]->tokenized);
+        $this->assertSame(['SSN' => ['[SSN_abc12345]']], $result->messages[0]->tokensByEntityType);
         $this->assertSame('messages[0].content', $result->fields[0]->path);
+        $this->assertSame(['SSN' => ['[SSN_abc12345]']], $result->fields[0]->tokensByEntityType);
         $this->assertSame(
             'Bearer ' . TestClientFactory::PROXY_KEY,
             TestClientFactory::lastAuthorizationHeader($setup['log']->transactions),
@@ -148,6 +152,7 @@ final class ProxyResourceTest extends TestCase
             'tokenized' => 'SSN [SSN_abc12345]',
             'matches' => self::scanResponse()['fields'][0]['matches'],
             'skipped_overlaps' => [],
+            'tokens_by_entity_type' => ['SSN' => ['[SSN_abc12345]']],
         ]];
         $response['body'] = [
             'messages' => [[
@@ -171,6 +176,7 @@ final class ProxyResourceTest extends TestCase
         ]);
 
         $this->assertSame('messages[0].content[0].text', $result->fields[0]->path);
+        $this->assertSame(['SSN' => ['[SSN_abc12345]']], $result->fields[0]->tokensByEntityType);
         $this->assertNotNull($result->body);
         $this->assertStringContainsString('"body"', TestClientFactory::lastPayloadJson($setup['log']->transactions));
     }

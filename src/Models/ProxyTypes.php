@@ -32,12 +32,14 @@ final class FieldScanPreview
 {
     /** @param list<MatchPreview> $matches */
     /** @param list<SkippedMatchPreview> $skippedOverlaps */
+    /** @param array<string, list<string>> $tokensByEntityType */
     public function __construct(
         public readonly string $path,
         public readonly string $original,
         public readonly string $tokenized,
         public readonly array $matches,
         public readonly array $skippedOverlaps,
+        public readonly array $tokensByEntityType = [],
     ) {
     }
 }
@@ -46,12 +48,14 @@ final class MessageScanPreview
 {
     /** @param list<MatchPreview> $matches */
     /** @param list<SkippedMatchPreview> $skippedOverlaps */
+    /** @param array<string, list<string>> $tokensByEntityType */
     public function __construct(
         public readonly ?string $role,
         public readonly string $original,
         public readonly string $tokenized,
         public readonly array $matches,
         public readonly array $skippedOverlaps,
+        public readonly array $tokensByEntityType = [],
     ) {
     }
 }
